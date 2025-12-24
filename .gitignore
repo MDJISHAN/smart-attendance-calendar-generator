@@ -1,0 +1,9 @@
+
+Paste:
+
+```gitignore
+__pycache__/
+*.xlsx
+*.pdf
+*.docx
+ui_config.txt
