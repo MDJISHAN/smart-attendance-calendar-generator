@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smart Attendance Generator</title>
+    <style>
+        body { font-family: Arial; background:#f4f6f8; }
+        .box {
+            width: 420px; margin: 60px auto; padding: 30px;
+            background: white; border-radius: 8px;
+            box-shadow: 0 0 10px #ccc;
+        }
+        h2 { text-align:center; }
+        input, button {
+            width:100%; padding:10px; margin:8px 0;
+        }
+        button {
+            background:#27ae60; color:white;
+            border:none; font-size:16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>Smart Attendance Generator</h2>
+    {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <div style="
+        background:#d4edda;
+        color:#155724;
+        padding:10px;
+        margin-bottom:15px;
+        border-radius:5px;
+        text-align:center;">
+        {{ messages[0] }}
+    </div>
+  {% endif %}
+{% endwith %}
+
+    <form method="POST" action="/generate">
+        <input name="batch_id" placeholder="Batch ID" required>
+        <input name="emp_id" placeholder="Employee ID" required>
+        <input name="emp_name" placeholder="Employee Name" required>
+        <input name="dept_name" placeholder="Dept Name" required>
+        <input name="company_name" placeholder="Company Name" required>
+        <input name="start_date" placeholder="Start Date (YYYY-MM-DD)" required>
+        <input name="end_date" placeholder="End Date (YYYY-MM-DD)" required>
+        <button type="submit">Generate Attendance</button>
+    </form>
+</div>
+<div style="text-align:center; margin-top:20px;">
+    <a href="/download/excel">
+        <button type="button">Download Excel</button>
+    </a>
+    <a href="/download/pdf">
+        <button type="button">Download PDF</button>
+    </a>
+    <a href="/download/docx">
+        <button type="button">Download Word</button>
+    </a>
+</div>
+
+</body>
+</html>
