@@ -3,3 +3,4 @@ openpyxl
 reportlab
 python-docx
 flask
+python-dateutil

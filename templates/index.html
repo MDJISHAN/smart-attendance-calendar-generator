@@ -18,13 +18,68 @@
             border:none; font-size:16px;
         }
     </style>
+<style>
+.loader-container {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #ddd;
+    border-top: 5px solid #28a745;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loader-container p {
+    margin-top: 10px;
+    font-weight: bold;
+    color: #444;
+}
+</style>
+
 </head>
 <body>
 
 <div class="box">
     <h2>Smart Attendance Generator</h2>
-    {% with messages = get_flashed_messages() %}
+   
+
+<form method="POST" action="/generate" enctype="multipart/form-data" onsubmit="showLoader()">
+
+    <input name="batch_id" placeholder="Batch ID" required>
+    <input name="dept_name" placeholder="Course Name" required>
+    <input name="company_name" placeholder="Company Name" required>
+
+    <input type="date" name="start_date" required>
+    <input type="date" name="end_date" required>
+
+    <label><b>Upload Student Batch Excel</b></label>
+    <input type="file" name="student_file" accept=".xlsx" required>
+    <!-- Loader -->
+    <div id="loader" class="loader-container" style="display:none;">
+        <div class="spinner"></div>
+        <p>Generating attendance, please wait...</p>
+    </div>
+
+    <button type="submit" class="btn green" onclick="showLoader()">
+        Generate Attendance
+    </button>
+</form>
+
+ {% with messages = get_flashed_messages() %}
   {% if messages %}
+    <a href="/download/zip" class="btn btn-success">
+    Download Attendance ZIP
+  </a>
     <div style="
         background:#d4edda;
         color:#155724;
@@ -33,32 +88,16 @@
         border-radius:5px;
         text-align:center;">
         {{ messages[0] }}
-    </div>
-  {% endif %}
-{% endwith %}
+            {% endif %}
+            {% endwith %}
+</div>
 
-    <form method="POST" action="/generate">
-        <input name="batch_id" placeholder="Batch ID" required>
-        <input name="emp_id" placeholder="Employee ID" required>
-        <input name="emp_name" placeholder="Employee Name" required>
-        <input name="dept_name" placeholder="Dept Name" required>
-        <input name="company_name" placeholder="Company Name" required>
-        <input name="start_date" placeholder="Start Date (YYYY-MM-DD)" required>
-        <input name="end_date" placeholder="End Date (YYYY-MM-DD)" required>
-        <button type="submit">Generate Attendance</button>
-    </form>
-</div>
-<div style="text-align:center; margin-top:20px;">
-    <a href="/download/excel">
-        <button type="button">Download Excel</button>
-    </a>
-    <a href="/download/pdf">
-        <button type="button">Download PDF</button>
-    </a>
-    <a href="/download/docx">
-        <button type="button">Download Word</button>
-    </a>
-</div>
+<script>
+function showLoader() {
+    document.getElementById("loader").style.display = "block";
+}
+</script>
+
 
 </body>
 </html>
