@@ -139,7 +139,7 @@ def generate():
             OUTPUT_DIR
         )
 
-        flash("✅ Attendance generated successfully for entire batch!")
+        flash("Hey Mr. Sandip ✅ Attendance generated successfully for entire batch!")
         return redirect(url_for("index"))
 
 
