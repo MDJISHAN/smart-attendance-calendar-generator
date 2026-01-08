@@ -1,24 +1,24 @@
 import pandas as pd
-import random, os
-import calendar
+import random, os, calendar
 from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
+from reportlab.platypus import (
+    SimpleDocTemplate, Table, TableStyle,
+    Paragraph, Spacer, PageBreak
+)
 from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from docx import Document
-from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
 
-
-# ================= READ FROM UI CONFIG =================
+# =====================================================
+# READ CONFIG
+# =====================================================
 with open("ui_config.txt") as f:
     BATCH_ID = f.readline().strip()
-    EMP_CODE = f.readline().strip()
-    EMP_NAME = f.readline().strip()
     DEPT_NAME = f.readline().strip()
     COMP_NAME = f.readline().strip()
     START_DATE = f.readline().strip()
@@ -27,58 +27,55 @@ with open("ui_config.txt") as f:
 start_date = datetime.strptime(START_DATE, "%d-%m-%Y")
 end_date   = datetime.strptime(END_DATE, "%d-%m-%Y")
 
+students_df = pd.read_excel("uploads/students.xlsx")
+students = students_df.rename(columns=str.lower).to_dict("records")
+
+# =====================================================
+# HELPERS
+# =====================================================
 def hhmm(minutes):
     return f"{minutes//60:02d}:{minutes%60:02d}"
 
-def google_weekday(dt):
+def weekday(dt):
     return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dt.weekday()]
 
-# ================= MONTH GENERATION =================
-def generate_month(year, month, global_start, global_end):
+# =====================================================
+# MONTH ATTENDANCE GENERATOR
+# =====================================================
+def generate_month(year, month):
     month_start = datetime(year, month, 1)
     month_end = datetime(year, month, calendar.monthrange(year, month)[1])
 
-    effective_start = max(global_start, month_start)
-    effective_end = min(global_end, month_end)
+    eff_start = max(start_date, month_start)
+    eff_end   = min(end_date, month_end)
 
     days = calendar.monthrange(year, month)[1]
 
     rows = {"IN": [], "OUT": [], "WORK": [], "BREAK": [], "OT": [], "Status": []}
-    weekday_row = []
+    weekdays = []
 
     present = absent = wo = hl = lv = 0
     total_work = total_ot = 0
 
     valid_days = []
-
     for d in range(1, days + 1):
         dt = datetime(year, month, d)
-        weekday_row.append(google_weekday(dt))
-
-        if effective_start <= dt <= effective_end and dt.weekday() != 6:
+        weekdays.append(weekday(dt))
+        if eff_start <= dt <= eff_end and dt.weekday() != 6:
             valid_days.append(d)
-
         if dt.weekday() == 6:
             wo += 1
 
-    absent_days = random.sample(valid_days, min(random.randint(3, 6), len(valid_days)))
+    absent_days = random.sample(valid_days, min(random.randint(2, 4), len(valid_days)))
 
     for d in range(1, days + 1):
         dt = datetime(year, month, d)
 
-        # OUTSIDE COURSE RANGE
-        if dt < effective_start or dt > effective_end:
+        if dt < eff_start or dt > eff_end or dt.weekday() == 6:
             for k in rows:
                 rows[k].append("---")
             continue
 
-        # SUNDAY
-        if dt.weekday() == 6:
-            for k in rows:
-                rows[k].append("---")
-            continue
-
-        # ABSENT
         if d in absent_days:
             rows["IN"].append("---")
             rows["OUT"].append("---")
@@ -89,7 +86,6 @@ def generate_month(year, month, global_start, global_end):
             absent += 1
             continue
 
-        # PRESENT
         in_m = random.randint(5, 40)
         out_m = random.randint(0, 45)
         work = (14 * 60 + out_m) - (9 * 60 + in_m)
@@ -118,157 +114,125 @@ def generate_month(year, month, global_start, global_end):
         "TotalOT": hhmm(total_ot)
     }
 
-    return df, weekday_row, summary
+    return df, weekdays, summary
 
-# ================= COLLECT MONTHS (FIXED) =================
-month_blocks = []
-cur = start_date.replace(day=1)
-
-while cur <= end_date:
-    df, weekdays, summary = generate_month(
-        cur.year,
-        cur.month,
-        start_date,
-        end_date
-    )
-    month_blocks.append((cur.strftime("%B-%Y"), df, weekdays, summary))
-    cur = (cur + timedelta(days=32)).replace(day=1)
-
-# ================= OUTPUT DIR =================
+# =====================================================
+# MONTH LOOP
+# =====================================================
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-REPORT_MONTH = start_date.strftime("%B-%Y")
-filename_prefix = f"{EMP_NAME}_{REPORT_MONTH}".replace(" ", "_")
+cur = start_date.replace(day=1)
+months = []
 
-# ================= EXCEL =================
-excel_file = f"{OUTPUT_DIR}/{filename_prefix}.xlsx"
-with pd.ExcelWriter(excel_file, engine="openpyxl") as writer:
-    for month, df, weekdays, summary in month_blocks:
-        header = [
-            ["Course Name", DEPT_NAME, "", "Company Name", COMP_NAME, "", "Report Month", month],
-            ["Reg", EMP_CODE, "Name", EMP_NAME, "Present", summary["Present"], "Absent", summary["Absent"]],
-            ["WO", summary["WO"], "HL", summary["HL"], "LV", summary["LV"], "Tot. Work+OT", summary["TotalWorkOT"]],
-            ["", "", "", "", "", "", "Total OT", summary["TotalOT"]],
-            [""] + df.columns.tolist(),
-            [""] + weekdays
-        ]
-        pd.DataFrame(header).to_excel(writer, sheet_name=month, index=False, header=False)
-        df.to_excel(writer, sheet_name=month, startrow=6)
+while cur <= end_date:
+    months.append(cur)
+    cur = (cur + timedelta(days=32)).replace(day=1)
 
-wb = load_workbook(excel_file)
-for ws in wb.worksheets:
-    for r in range(1, 5):
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
-        ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=5)
-        ws.merge_cells(start_row=r, start_column=6, end_row=r, end_column=7)
-
-    for row in ws.iter_rows(min_row=1, max_row=6):
-        for cell in row:
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.font = Font(bold=True)
-
-    ws.column_dimensions["A"].width = 12
-    for c in range(2, 35):
-        ws.column_dimensions[get_column_letter(c)].width = 6
-
-wb.save(excel_file)
-
-# ================= PDF =================
-pdf_file = f"{OUTPUT_DIR}/{filename_prefix}.pdf"
+# =====================================================
+# EXCEL + PDF PER MONTH
+# =====================================================
 styles = getSampleStyleSheet()
-elements = []
-
 header_style = ParagraphStyle(
-    name="HeaderStyle",
+    "header",
     fontSize=10,
     leading=14,
     alignment=TA_LEFT,
-    spaceAfter=6
+    spaceAfter=8
 )
 
-pdf = SimpleDocTemplate(
-    pdf_file,
-    pagesize=landscape(A3),
-    leftMargin=10,
-    rightMargin=10,
-    topMargin=10,
-    bottomMargin=10
-)
+for m in months:
+    
+    year, month = m.year, m.month
+    month_label = m.strftime("%B-%Y")
+    file_prefix = month_label.replace(" ", "_")
 
-for month, df, weekdays, summary in month_blocks:
-    elements.append(Paragraph(f"<b>{month}</b>", styles["Heading2"]))
-    elements.append(Paragraph(
-    f"""
-    <b>Course Name:</b> {DEPT_NAME}&nbsp;&nbsp;&nbsp&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-    <b>Company Name:</b> {COMP_NAME}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-    <b>Report Month:</b> {month}<br/>
+    excel_file = f"{OUTPUT_DIR}/{file_prefix}.xlsx"
+    pdf_file   = f"{OUTPUT_DIR}/{file_prefix}.pdf"
 
-    <b>REG:</b> {EMP_CODE}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-    <b>Name:</b> {EMP_NAME}<br/>
+    # ---------------- EXCEL ----------------
+    with pd.ExcelWriter(excel_file, engine="openpyxl") as writer:
+        row_ptr = 0
 
-    <b>Present:</b>
-    <font color="green"><b>{summary['Present']}</b></font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        for stu in students:
+            df, weekdays, summary = generate_month(year, month)
 
-    <b>Absent:</b>
-    <font color="red"><b>{summary['Absent']}</b></font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            header = [
+                ["Empcode", "Batch ID:", BATCH_ID, stu["empcode"], "Name", stu["name"],"Month", month_label],
+                ["Present", summary["Present"], "Absent", summary["Absent"]],"month", month_label,
+                [""] + df.columns.tolist(),
+                [""] + weekdays
+            ]
 
-    <b>WO:</b> {summary['WO']}&nbsp;&nbsp;&nbsp&nbsp;&nbsp;&nbsp;&nbsp;
-    <b>HL:</b> {summary['HL']}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-    <b>LV:</b> {summary['LV']}<br/>
-
-    <b>Total Work + OT:</b> {summary['TotalWorkOT']}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-    <b>Total OT:</b> {summary['TotalOT']}
-    """,
-    header_style
-))
-
-    elements.append(Spacer(1, 12))
-
-    table_data = [[""] + df.columns.tolist(), [""] + weekdays]
-    for idx, row in df.iterrows():
-        table_data.append([idx] + row.tolist())
-
-    table = Table(table_data, colWidths=[45] + [35]*31, repeatRows=2)
-
-    style_commands = [
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ("BACKGROUND", (0, 0), (-1, 1), colors.lightgrey),
-        ("FONTNAME", (0, 0), (-1, 1), "Helvetica-Bold"),
-    ]
-
-    # 🔹 Status row index (last row)
-    status_row_index = len(table_data) - 1
-
-    # 🔹 Apply colors to P / A
-    for col in range(1, len(table_data[0])):
-        val = table_data[status_row_index][col]
-
-        if val == "P":
-            style_commands.append(
-                ("TEXTCOLOR", (col, status_row_index), (col, status_row_index), colors.green)
-            )
-            style_commands.append(
-                ("FONTNAME", (col, status_row_index), (col, status_row_index), "Helvetica-Bold")
+            pd.DataFrame(header).to_excel(
+                writer, sheet_name=month_label,
+                startrow=row_ptr, index=False, header=False
             )
 
-        elif val == "A":
-            style_commands.append(
-                ("TEXTCOLOR", (col, status_row_index), (col, status_row_index), colors.red)
-            )
-            style_commands.append(
-                ("FONTNAME", (col, status_row_index), (col, status_row_index), "Helvetica-Bold")
+            df.to_excel(
+                writer, sheet_name=month_label,
+                startrow=row_ptr + 4
             )
 
-    table.setStyle(TableStyle(style_commands))
+            row_ptr += len(df) + 8
 
+    # ---------------- PDF ----------------
+    pdf = SimpleDocTemplate(
+        pdf_file,
+        pagesize=landscape(A3),
+        leftMargin=10,
+        rightMargin=10,
+        topMargin=10,
+        bottomMargin=10
+    )
 
-    elements.append(table)
-    elements.append(Spacer(1, 25))
+    elements = [Paragraph(f"<b>{month_label}</b>", styles["Heading2"])]
 
-pdf.build(elements)
+    for stu in students:
+        month_label = m.strftime("%B-%Y")   # e.g. July-2025
+        df, weekdays, summary = generate_month(year, month)
+        
 
+        elements.append(Paragraph(
 
+            f"""
+            <b>Batch ID:</b> {BATCH_ID} &nbsp;&nbsp;
+            <b>Course:</b> {DEPT_NAME} &nbsp;&nbsp;
+            <b>Company:</b> {COMP_NAME} &nbsp;&nbsp;
+            <b>Empcode:</b> {stu['empcode']} &nbsp;&nbsp;
+            <b>Name:</b> {stu['name']}<br/>
+            <b>Month:</b> <b>{month_label}</b><br/>
+            <b>Present:</b> <font color="green">{summary['Present']}</font> &nbsp;&nbsp;
+            <b>Absent:</b> <font color="red">{summary['Absent']}</font> &nbsp;&nbsp;
+            <b>Total OT:</b> {summary['TotalOT']}
+            """,
+            header_style
+        ))
 
-print("✅ FINAL attendance generated correctly (month boundaries respected)")
+        table_data = [[""] + df.columns.tolist(), [""] + weekdays]
+        for idx, row in df.iterrows():
+            table_data.append([idx] + row.tolist())
+
+        table = Table(table_data, repeatRows=2)
+
+        style_cmds = [
+            ("GRID", (0,0), (-1,-1), 0.4, colors.black),
+            ("ALIGN", (1,0), (-1,-1), "CENTER"),
+            ("BACKGROUND", (0,0), (-1,1), colors.lightgrey),
+            ("FONTNAME", (0,0), (-1,1), "Helvetica-Bold"),
+        ]
+
+        status_row = len(table_data) - 1
+        for c in range(1, len(table_data[0])):
+            if table_data[status_row][c] == "P":
+                style_cmds.append(("TEXTCOLOR", (c,status_row), (c,status_row), colors.green))
+            elif table_data[status_row][c] == "A":
+                style_cmds.append(("TEXTCOLOR", (c,status_row), (c,status_row), colors.red))
+
+        table.setStyle(TableStyle(style_cmds))
+        elements.append(table)
+        elements.append(PageBreak())
+
+    pdf.build(elements)
+
+print("✅ Month-wise consolidated attendance generated successfully")
